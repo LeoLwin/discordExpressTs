@@ -43,18 +43,18 @@ const broker_1 = __importDefault(require("./broker/broker"));
 const indexController_1 = __importDefault(require("./controller/indexController"));
 const config_1 = __importDefault(require("./config/config"));
 broker_1.default.start().then(() => {
-    console.log("callback");
-});
-broker_1.default.start().then(() => {
+    console.log("Service Broker started.");
     const app = (0, express_1.default)();
-    console.log("Something fix");
+    console.log("Express app initialized.");
     app.use(express_1.default.json());
     app.get("/", (req, res) => {
-        res.send("Welcome to Student Management System API");
+        res.send("Welcome to Discord API");
     });
-    app.use("/user", indexController_1.default);
+    app.use("/api", indexController_1.default);
     const PORT = config_1.default.port || 8000;
     app.listen(PORT, "0.0.0.0", () => {
         console.log(`Server is listening on http://0.0.0.0:${PORT}`);
     });
+    // loginBots()
+    // client.login(process.env.BOT_TOKEN);
 });

@@ -1,7 +1,13 @@
 import express from "express";
-import user from  "./userController"
-
+import user from "./userController"
+import discord from "./discordController.js";
 const router = express.Router();
-router.use("/", user)
+
+router.get("/", (req, res) => {
+    res.send("Welcome to the DiscordAPI");
+});
+router.use("/", user);
+router.use("/discord", discord);
+
 
 export default router;

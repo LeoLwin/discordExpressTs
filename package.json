@@ -4,11 +4,12 @@
   "description": "Endpoint",
   "main": "server.js",
   "scripts": {
-    "test": "nodemon ./dist/server.js"
+    "dev": "nodemon ./dist/server.js"
   },
   "author": "Kaung Htet Lwin",
   "license": "ISC",
   "dependencies": {
+    "discordx": "^11.13.3",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "ioredis": "^5.8.2",

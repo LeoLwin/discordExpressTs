@@ -241,6 +241,136 @@ const loginBots = async () => {
     }
 };
 
+const logIn = async (botToken: string) => {
+    const clients: Client[] = [];
+    const botClient = new Client({
+        intents: [
+            GatewayIntentBits.Guilds,
+            GatewayIntentBits.GuildMessages,
+            GatewayIntentBits.MessageContent,
+            GatewayIntentBits.GuildMembers
+        ]
+    });
+
+    botClient.once("ready", () => {
+        console.log(`Bot logged in as ${botClient.user?.tag}`);
+        console.log(`Bot ID   : ${botClient.user?.id}`);
+        console.log(`Bot Tag  : ${botClient.user?.tag}`);
+        const clientId = botClient.user?.id;
+
+        console.log("Client ID :", clientId);
+
+    });
+
+    botClient.on("guildCreate", async (guild) => {
+        const botUser = botClient.user;
+
+        console.log("===== BOT JOINED A SERVER =====");
+        console.log(`Joined a new server: ${guild.name}`);
+        console.log(`Bot Username : ${botUser?.tag}`);
+        console.log(`Bot ID       : ${botUser?.id}`);
+        console.log(`Server Name  : ${guild.name}`);
+        console.log(`Server ID    : ${guild.id}`);
+        console.log(`Member Count : ${guild.memberCount}`);
+        console.log(`Owner ID     : ${guild.ownerId}`);
+
+        await putTheGuildIdTotheClient(botUser, guild.id)
+    });
+
+    botClient.on("messageCreate", (message) => {
+        // botClient.user gives the bot itself
+        if (message.author.bot) {
+            console.log("Message from bot, ignoring.");
+            return
+        };
+        const botTag = botClient.user?.tag;   // e.g., "KHL#8511"
+        const botId = botClient.user?.id;     // e.g., "1446061847798218786"
+        console.log("User message:", message.content);
+
+        // message.guild gives the server the message came from
+        const guildId = message.guild?.id;    // e.g., "1457680812530208965"
+        const guildName = message.guild?.name;
+
+        const authorTag = message.author.tag; // who sent the message
+        const content = message.content;      // message content
+
+        const channelId = message.channel.id;
+
+        console.log("Channel ID  :", channelId);
+
+        sendMessage(channelId, botId!, guildId!);
+
+
+        console.log(`[${botTag}] received a message in guild ${guildName} (${guildId}) from ${authorTag}: ${content}`);
+    });
+
+    await botClient.login(botToken);
+    clients.push(botClient);
+    botClients.push(botClient);
+    return clients;
+};
+
+const sendMessage = async (channelId: string, botId: string, guildId: string) => {
+    console.log("-----------------------------------------------");
+    console.log("call sendMessage");
+    const key = "ActiveChatChannels";
+    const getActiveChatChannels = await redis.get(key);
+    let activeChatChannels: { channelName: string; guildId: string; channelId: string; botId: string }[] = [];
+    console.log("getActiveChatChannels :", getActiveChatChannels);
+    if (getActiveChatChannels) {
+        activeChatChannels = JSON.parse(getActiveChatChannels);
+        const channelInfo = activeChatChannels.find(ac => ac.channelId === channelId && ac.botId === botId && ac.guildId === guildId);
+        if (!channelInfo) {
+            console.log("No matching active chat channel found. Ignoring message.");
+            return;
+        }
+        console.log("channelInfo :", channelInfo);
+        console.log("To reply  to the other platform")
+        // activeChatChannels.push({ channelName, guildId, channelId: result.id, botId: botInfo.clientId });
+    } else {
+        // activeChatChannels.push({ channelName, guildId, channelId: result.id, botId: botInfo.clientId });
+    }
+};
+
+const putTheGuildIdTotheClient = async (botUser: any, guildId: string) => {
+    console.log("-----------------------------------------------");
+    console.log("call putTheGuildIdTotheClient");
+    const key = "DiscordData";
+    const getData = await redis.get(key);
+
+    let DiscordData: {
+        botToken: string;
+        clientId: string;
+        clientSecret: string;
+        guildId?: string;
+    }[] = [];
+
+    console.log("getData :", getData);
+
+    if (getData) {
+        DiscordData = JSON.parse(getData);
+    }
+
+    console.log("type of botUser?.id :", typeof botUser?.id);
+    DiscordData.map((d) => {
+        console.log("type of d.clientId :", typeof d.clientId);
+    })
+    const botInfo = DiscordData.find(d => d.clientId === botUser?.id);
+    console.log("botInfo :", botInfo);
+    if (!botInfo) return;
+
+    // Store single guildId
+    botInfo.guildId = guildId;
+
+    await redis.set(key, JSON.stringify(DiscordData));
+    console.log(`Saved guild ${guildId} for bot ${botUser?.tag}`);
+    setTimeout(async () => {
+        const getData = await redis.get(key);
+        console.log("Updated DiscordData from Redis:", getData);
+    }, 2000);
+};
+
+
 const leaveGuild = async (client: {
     tag: string,
     id: string
@@ -267,7 +397,7 @@ const leaveGuild = async (client: {
         return false;
     }
 };
-
+//  const createPrivateChannel = async (channelName: string, allowedMemberIds: string[] = []) => {
 
 export {
     // client,

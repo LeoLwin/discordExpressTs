@@ -223,6 +223,111 @@ const loginBots = () => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.loginBots = loginBots;
+const logIn = (botToken) => __awaiter(void 0, void 0, void 0, function* () {
+    const clients = [];
+    const botClient = new discord_js_1.Client({
+        intents: [
+            discord_js_1.GatewayIntentBits.Guilds,
+            discord_js_1.GatewayIntentBits.GuildMessages,
+            discord_js_1.GatewayIntentBits.MessageContent,
+            discord_js_1.GatewayIntentBits.GuildMembers
+        ]
+    });
+    botClient.once("ready", () => {
+        var _a, _b, _c, _d;
+        console.log(`Bot logged in as ${(_a = botClient.user) === null || _a === void 0 ? void 0 : _a.tag}`);
+        console.log(`Bot ID   : ${(_b = botClient.user) === null || _b === void 0 ? void 0 : _b.id}`);
+        console.log(`Bot Tag  : ${(_c = botClient.user) === null || _c === void 0 ? void 0 : _c.tag}`);
+        const clientId = (_d = botClient.user) === null || _d === void 0 ? void 0 : _d.id;
+        console.log("Client ID :", clientId);
+    });
+    botClient.on("guildCreate", (guild) => __awaiter(void 0, void 0, void 0, function* () {
+        const botUser = botClient.user;
+        console.log("===== BOT JOINED A SERVER =====");
+        console.log(`Joined a new server: ${guild.name}`);
+        console.log(`Bot Username : ${botUser === null || botUser === void 0 ? void 0 : botUser.tag}`);
+        console.log(`Bot ID       : ${botUser === null || botUser === void 0 ? void 0 : botUser.id}`);
+        console.log(`Server Name  : ${guild.name}`);
+        console.log(`Server ID    : ${guild.id}`);
+        console.log(`Member Count : ${guild.memberCount}`);
+        console.log(`Owner ID     : ${guild.ownerId}`);
+        yield putTheGuildIdTotheClient(botUser, guild.id);
+    }));
+    botClient.on("messageCreate", (message) => {
+        var _a, _b, _c, _d;
+        // botClient.user gives the bot itself
+        if (message.author.bot) {
+            console.log("Message from bot, ignoring.");
+            return;
+        }
+        ;
+        const botTag = (_a = botClient.user) === null || _a === void 0 ? void 0 : _a.tag; // e.g., "KHL#8511"
+        const botId = (_b = botClient.user) === null || _b === void 0 ? void 0 : _b.id; // e.g., "1446061847798218786"
+        console.log("User message:", message.content);
+        // message.guild gives the server the message came from
+        const guildId = (_c = message.guild) === null || _c === void 0 ? void 0 : _c.id; // e.g., "1457680812530208965"
+        const guildName = (_d = message.guild) === null || _d === void 0 ? void 0 : _d.name;
+        const authorTag = message.author.tag; // who sent the message
+        const content = message.content; // message content
+        const channelId = message.channel.id;
+        console.log("Channel ID  :", channelId);
+        sendMessage(channelId, botId, guildId);
+        console.log(`[${botTag}] received a message in guild ${guildName} (${guildId}) from ${authorTag}: ${content}`);
+    });
+    yield botClient.login(botToken);
+    clients.push(botClient);
+    botClients.push(botClient);
+    return clients;
+});
+const sendMessage = (channelId, botId, guildId) => __awaiter(void 0, void 0, void 0, function* () {
+    console.log("-----------------------------------------------");
+    console.log("call sendMessage");
+    const key = "ActiveChatChannels";
+    const getActiveChatChannels = yield redis_1.default.get(key);
+    let activeChatChannels = [];
+    console.log("getActiveChatChannels :", getActiveChatChannels);
+    if (getActiveChatChannels) {
+        activeChatChannels = JSON.parse(getActiveChatChannels);
+        const channelInfo = activeChatChannels.find(ac => ac.channelId === channelId && ac.botId === botId && ac.guildId === guildId);
+        if (!channelInfo) {
+            console.log("No matching active chat channel found. Ignoring message.");
+            return;
+        }
+        console.log("channelInfo :", channelInfo);
+        console.log("To reply  to the other platform");
+        // activeChatChannels.push({ channelName, guildId, channelId: result.id, botId: botInfo.clientId });
+    }
+    else {
+        // activeChatChannels.push({ channelName, guildId, channelId: result.id, botId: botInfo.clientId });
+    }
+});
+const putTheGuildIdTotheClient = (botUser, guildId) => __awaiter(void 0, void 0, void 0, function* () {
+    console.log("-----------------------------------------------");
+    console.log("call putTheGuildIdTotheClient");
+    const key = "DiscordData";
+    const getData = yield redis_1.default.get(key);
+    let DiscordData = [];
+    console.log("getData :", getData);
+    if (getData) {
+        DiscordData = JSON.parse(getData);
+    }
+    console.log("type of botUser?.id :", typeof (botUser === null || botUser === void 0 ? void 0 : botUser.id));
+    DiscordData.map((d) => {
+        console.log("type of d.clientId :", typeof d.clientId);
+    });
+    const botInfo = DiscordData.find(d => d.clientId === (botUser === null || botUser === void 0 ? void 0 : botUser.id));
+    console.log("botInfo :", botInfo);
+    if (!botInfo)
+        return;
+    // Store single guildId
+    botInfo.guildId = guildId;
+    yield redis_1.default.set(key, JSON.stringify(DiscordData));
+    console.log(`Saved guild ${guildId} for bot ${botUser === null || botUser === void 0 ? void 0 : botUser.tag}`);
+    setTimeout(() => __awaiter(void 0, void 0, void 0, function* () {
+        const getData = yield redis_1.default.get(key);
+        console.log("Updated DiscordData from Redis:", getData);
+    }), 2000);
+});
 const leaveGuild = (client, guildId) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b, _c;
     const botClient = botClients.find(c => { var _a; return ((_a = c.user) === null || _a === void 0 ? void 0 : _a.id) === client.id; });

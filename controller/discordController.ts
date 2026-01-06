@@ -3,7 +3,7 @@ import express from "express";
 import ServiceBroker from "../broker/broker"
 import ResponseStatus from "../helper/responseStatus";
 import type { Request, Response, NextFunction } from "express";
-import { leaveGuild, loginBots } from "../helper/discord";
+import { createChannel, leaveGuild, loginBots, sendMessageToChannel } from "../helper/discord";
 import redis from "../config/redis";
 
 const router = express.Router();
@@ -17,6 +17,7 @@ const handleError = (res: Response, err: Error) => {
 router.get("/", (req: Request, res: Response) => {
   res.send("Welcome to the discord controller ");
 });
+
 // router.get("/list", async (req: Request, res: Response) => {
 //   try {
 //     const { current, limit, role } = req.body;
@@ -35,15 +36,15 @@ router.get("/", (req: Request, res: Response) => {
 
 router.post("/addDiscordData", async (req: Request, res: Response) => {
   try {
-    const { botToken, cliedId, clientSecret } = req.body;
-    if (!botToken || !cliedId || !clientSecret) {
+    const { botToken, clientId, clientSecret } = req.body;
+    if (!botToken || !clientId || !clientSecret) {
       return res.json(ResponseStatus.UNKNOWN("Missing parameters"));
     }
 
     const key = "DiscordData";
     const getData = await redis.get(key);
 
-    let DiscordData: { botToken: string; cliedId: string; clientSecret: string }[] = [];
+    let DiscordData: { botToken: string; clientId: string; clientSecret: string, guildId?: string }[] = [];
 
     if (getData) {
       DiscordData = JSON.parse(getData);
@@ -54,10 +55,10 @@ router.post("/addDiscordData", async (req: Request, res: Response) => {
       }
     }
 
-    DiscordData.push({ botToken, cliedId, clientSecret });
+    DiscordData.push({ botToken, clientId, clientSecret });
     await redis.set(key, JSON.stringify(DiscordData));
 
-    const addBotToTheServerURL = `https://discord.com/oauth2/authorize?client_id=${cliedId}&permissions=8&integration_type=0&scope=bot+applications.commands`
+    const addBotToTheServerURL = `https://discord.com/oauth2/authorize?client_id=${clientId}&permissions=8&integration_type=0&scope=bot+applications.commands`
 
     console.log("Updated DiscordData in Redis:", DiscordData);
 
@@ -70,22 +71,23 @@ router.post("/addDiscordData", async (req: Request, res: Response) => {
 
 
 
-// router.post("/create-channel", async (req, res) => {
-//   try {
-//     const { name, guildId } = req.body;
-//     console.log("req.body:", req.body);
-//     const channel = await createChannel(name, guildId);
-//     // console.log("channel create : ", channel)
-//     // console.log('hello')
-//     res.json({ success: true, channelId: channel.id });
-//   } catch (err: any) {
-//     handleError(res, err as Error);
-//   }
-// });
+router.post("/create-channel", async (req, res) => {
+  try {
+    const { name, guildId } = req.body;
+    console.log("req.body:", req.body);
+    const channel = await createChannel(name, guildId);
+    // console.log("channel create : ", channel)
+    // console.log('hello')
+    res.json({ success: true, channelId: channel.id });
+  } catch (err: any) {
+    handleError(res, err as Error);
+  }
+});
 
 router.get("/deleteAllbots", async (req: Request, res: Response) => {
   try {
     await redis.del(`DiscordData`);
+    await redis.del(`ActiveChatChannels`);
     res.json(ResponseStatus.OK("All bots deleted successfully"));
   } catch (err) {
     console.log("err in deleteAllbots :", err);
@@ -142,6 +144,28 @@ router.post("/leaveGuild", async (req: Request, res: Response) => {
   }
 })
 
+router.post("/sendMessageToChannel", async (req: Request, res: Response) => {
+  try {
+    const { channelId, guildId, content } = req.body;
+    const result = await sendMessageToChannel(channelId, content, guildId,);
+    res.json(ResponseStatus.OK(result, "Message sent successfully"));
+  } catch (err) {
+    console.log("err in sendMessageToChannel :", err);
+    handleError(res, err as Error);
+  }
+})
+
+
+router.get("/getActiveChatChannels", async (req: Request, res: Response) => {
+  try {
+    const getActiveChatChannels = await redis.get(`ActiveChatChannels`);
+
+    res.json(ResponseStatus.OK("Active chat channels fetched successfully", JSON.parse(getActiveChatChannels || '[]')));
+  } catch (err) {
+    console.log("err in getActiveChatChannels :", err);
+    handleError(res, err as Error);
+  }
+})
 
 export default router;
 

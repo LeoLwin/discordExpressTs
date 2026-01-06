@@ -41,8 +41,8 @@ router.get("/", (req, res) => {
 // });
 router.post("/addDiscordData", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { botToken, cliedId, clientSecret } = req.body;
-        if (!botToken || !cliedId || !clientSecret) {
+        const { botToken, clientId, clientSecret } = req.body;
+        if (!botToken || !clientId || !clientSecret) {
             return res.json(responseStatus_1.default.UNKNOWN("Missing parameters"));
         }
         const key = "DiscordData";
@@ -55,9 +55,9 @@ router.post("/addDiscordData", (req, res) => __awaiter(void 0, void 0, void 0, f
                 return res.json(responseStatus_1.default.OK("Discord Agent already exists"));
             }
         }
-        DiscordData.push({ botToken, cliedId, clientSecret });
+        DiscordData.push({ botToken, clientId, clientSecret });
         yield redis_1.default.set(key, JSON.stringify(DiscordData));
-        const addBotToTheServerURL = `https://discord.com/oauth2/authorize?client_id=${cliedId}&permissions=8&integration_type=0&scope=bot+applications.commands`;
+        const addBotToTheServerURL = `https://discord.com/oauth2/authorize?client_id=${clientId}&permissions=8&integration_type=0&scope=bot+applications.commands`;
         console.log("Updated DiscordData in Redis:", DiscordData);
         res.json(responseStatus_1.default.OK(addBotToTheServerURL, "Discord Agent added successfully"));
     }
@@ -66,21 +66,23 @@ router.post("/addDiscordData", (req, res) => __awaiter(void 0, void 0, void 0, f
         res.json(responseStatus_1.default.UNKNOWN(err instanceof Error ? err.message : "Unknown error"));
     }
 }));
-// router.post("/create-channel", async (req, res) => {
-//   try {
-//     const { name, guildId } = req.body;
-//     console.log("req.body:", req.body);
-//     const channel = await createChannel(name, guildId);
-//     // console.log("channel create : ", channel)
-//     // console.log('hello')
-//     res.json({ success: true, channelId: channel.id });
-//   } catch (err: any) {
-//     handleError(res, err as Error);
-//   }
-// });
+router.post("/create-channel", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { name, guildId } = req.body;
+        console.log("req.body:", req.body);
+        const channel = yield (0, discord_1.createChannel)(name, guildId);
+        // console.log("channel create : ", channel)
+        // console.log('hello')
+        res.json({ success: true, channelId: channel.id });
+    }
+    catch (err) {
+        handleError(res, err);
+    }
+}));
 router.get("/deleteAllbots", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         yield redis_1.default.del(`DiscordData`);
+        yield redis_1.default.del(`ActiveChatChannels`);
         res.json(responseStatus_1.default.OK("All bots deleted successfully"));
     }
     catch (err) {
@@ -135,6 +137,27 @@ router.post("/leaveGuild", (req, res) => __awaiter(void 0, void 0, void 0, funct
     }
     catch (err) {
         console.log("err in leaveGuild :", err);
+        handleError(res, err);
+    }
+}));
+router.post("/sendMessageToChannel", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { channelId, guildId, content } = req.body;
+        const result = yield (0, discord_1.sendMessageToChannel)(channelId, content, guildId);
+        res.json(responseStatus_1.default.OK(result, "Message sent successfully"));
+    }
+    catch (err) {
+        console.log("err in sendMessageToChannel :", err);
+        handleError(res, err);
+    }
+}));
+router.get("/getActiveChatChannels", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const getActiveChatChannels = yield redis_1.default.get(`ActiveChatChannels`);
+        res.json(responseStatus_1.default.OK("Active chat channels fetched successfully", JSON.parse(getActiveChatChannels || '[]')));
+    }
+    catch (err) {
+        console.log("err in getActiveChatChannels :", err);
         handleError(res, err);
     }
 }));

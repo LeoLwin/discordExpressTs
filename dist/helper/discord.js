@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.leaveGuild = exports.loginBots = exports.sendMessageToChannel = exports.createChannel = void 0;
+exports.leaveGuild = exports.loginBots = exports.sendFileToChannel = exports.sendMessageToChannel = exports.deletChannel = exports.createChannel = exports.logInBot = void 0;
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
 const discord_js_1 = require("discord.js");
@@ -63,6 +63,44 @@ const createChannel = (channelName, guildId) => __awaiter(void 0, void 0, void 0
     return result;
 });
 exports.createChannel = createChannel;
+const deletChannel = (channelId, guildId) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        console.log("Delete channel with channelId:", { channelId, guildId });
+        let guild;
+        const key = "DiscordData";
+        const getData = yield redis_1.default.get(key);
+        console.log("getData from Redis :", JSON.stringify(getData));
+        if (!getData)
+            throw new Error("No Discord data found in Redis");
+        const DiscordData = JSON.parse(getData);
+        const botInfo = DiscordData.find(d => d.guildId === guildId);
+        console.log("botInfo :", botInfo);
+        if (!botInfo)
+            throw new Error("No bot found for the specified guildId");
+        console.log("botClients :", botClients);
+        guild = botClients.find(c => { var _a; return ((_a = c.user) === null || _a === void 0 ? void 0 : _a.id) === botInfo.clientId; });
+        console.log("Bot client found for guildId:", guild);
+        if (!guild)
+            throw new Error("Bot client not found");
+        console.log("Guild fetched:", guild.id);
+        const guildObj = guild.guilds.cache.get(guildId);
+        if (!guildObj)
+            throw new Error("Guild not found on bot client");
+        const channel = yield guildObj.channels.fetch(channelId);
+        if (!channel) {
+            console.log("Channel not found!");
+            return;
+        }
+        yield channel.delete();
+        console.log(`Channel with ID ${channelId} deleted successfully.`);
+        return `Channel with ID ${channelId} deleted successfully.`;
+    }
+    catch (error) {
+        console.log("Error in deleteChannel :", error);
+        return error.message;
+    }
+});
+exports.deletChannel = deletChannel;
 const sendMessageToChannel = (channelId, content, guildId) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         console.log("Sending message to channelId:", { channelId, content, guildId });
@@ -102,6 +140,43 @@ const sendMessageToChannel = (channelId, content, guildId) => __awaiter(void 0, 
     }
 });
 exports.sendMessageToChannel = sendMessageToChannel;
+const sendFileToChannel = (channelId, guildId, buffer, fileName, content) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        console.log("sendFileToChannel:", { channelId, guildId });
+        const key = "ActiveChatChannels";
+        const getActiveChatChannels = yield redis_1.default.get(key);
+        if (!getActiveChatChannels) {
+            throw new Error("No activeChatChannels data found in Redis");
+        }
+        const activeChatChannels = JSON.parse(getActiveChatChannels);
+        const botInfo = activeChatChannels.find(d => d.guildId === guildId);
+        if (!botInfo)
+            throw new Error("No bot found for the specified guildId");
+        // Find the correct bot client
+        const client = botClients.find(c => { var _a; return ((_a = c.user) === null || _a === void 0 ? void 0 : _a.id) === botInfo.botId; });
+        if (!client)
+            throw new Error("Bot client not found");
+        const guild = client.guilds.cache.get(guildId);
+        if (!guild)
+            throw new Error("Guild not found on bot client");
+        // Fetch channel
+        const channel = yield guild.channels.fetch(channelId);
+        if (!channel || !channel.isTextBased()) {
+            throw new Error("Channel not found or not text-based");
+        }
+        const message = yield channel.send({
+            content: content,
+            files: [{ attachment: buffer, name: fileName }]
+        });
+        console.log(`File sent to channel ${channelId}`);
+        return message;
+    }
+    catch (err) {
+        console.error("Error sending file:", err);
+        return err.message;
+    }
+});
+exports.sendFileToChannel = sendFileToChannel;
 const botClients = [];
 const botMessageCallbacks = new Map();
 const loginBots = () => __awaiter(void 0, void 0, void 0, function* () {
@@ -223,8 +298,8 @@ const loginBots = () => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.loginBots = loginBots;
-const logIn = (botToken) => __awaiter(void 0, void 0, void 0, function* () {
-    const clients = [];
+const logInBot = (botToken) => __awaiter(void 0, void 0, void 0, function* () {
+    // const clients: Client[] = [];
     const botClient = new discord_js_1.Client({
         intents: [
             discord_js_1.GatewayIntentBits.Guilds,
@@ -275,10 +350,11 @@ const logIn = (botToken) => __awaiter(void 0, void 0, void 0, function* () {
         console.log(`[${botTag}] received a message in guild ${guildName} (${guildId}) from ${authorTag}: ${content}`);
     });
     yield botClient.login(botToken);
-    clients.push(botClient);
+    // clients.push(botClient);
     botClients.push(botClient);
-    return clients;
+    return botClient;
 });
+exports.logInBot = logInBot;
 const sendMessage = (channelId, botId, guildId) => __awaiter(void 0, void 0, void 0, function* () {
     console.log("-----------------------------------------------");
     console.log("call sendMessage");

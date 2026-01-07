@@ -52,6 +52,42 @@ const createChannel = async (channelName: string, guildId: string) => {
     return result;
 }
 
+
+const deletChannel = async (channelId: string, guildId: string) => {
+    try {
+        console.log("Delete channel with channelId:", { channelId, guildId });
+        let guild: any;
+
+        const key = "DiscordData";
+        const getData = await redis.get(key);
+        console.log("getData from Redis :", JSON.stringify(getData));
+        if (!getData) throw new Error("No Discord data found in Redis");
+        const DiscordData: { botToken: string; clientId: string; clientSecret: string, guildId?: string }[] =
+            JSON.parse(getData);
+        const botInfo = DiscordData.find(d => d.guildId === guildId);
+        console.log("botInfo :", botInfo);
+        if (!botInfo) throw new Error("No bot found for the specified guildId");
+        console.log("botClients :", botClients);
+        guild = botClients.find(c => c.user?.id === botInfo.clientId);
+
+        console.log("Bot client found for guildId:", guild);
+        if (!guild) throw new Error("Bot client not found");
+        console.log("Guild fetched:", guild.id);
+        const guildObj = guild.guilds.cache.get(guildId);
+        if (!guildObj) throw new Error("Guild not found on bot client");
+        const channel = await guildObj.channels.fetch(channelId);
+        if (!channel) {
+            console.log("Channel not found!");
+            return;
+        }
+        await channel.delete();
+        console.log(`Channel with ID ${channelId} deleted successfully.`);
+        return `Channel with ID ${channelId} deleted successfully.`;
+    } catch (error: any) {
+        console.log("Error in deleteChannel :", error);
+        return error.message
+    }
+}
 const sendMessageToChannel = async (channelId: string, content: string, guildId: string) => {
     try {
         console.log("Sending message to channelId:", { channelId, content, guildId });
@@ -90,6 +126,60 @@ const sendMessageToChannel = async (channelId: string, content: string, guildId:
         console.error("Error sending message:", err);
     }
 }
+
+const sendFileToChannel = async (
+    channelId: string,
+    guildId: string,
+    buffer: Buffer,
+    fileName: string,
+    content?: string
+) => {
+    try {
+        console.log("sendFileToChannel:", { channelId, guildId });
+
+        const key = "ActiveChatChannels";
+        const getActiveChatChannels = await redis.get(key);
+        if (!getActiveChatChannels) {
+            throw new Error("No activeChatChannels data found in Redis");
+        }
+
+        const activeChatChannels: {
+            channelName: string;
+            guildId: string;
+            channelId: string;
+            botId: string;
+        }[] = JSON.parse(getActiveChatChannels);
+
+        const botInfo = activeChatChannels.find(d => d.guildId === guildId);
+        if (!botInfo) throw new Error("No bot found for the specified guildId");
+
+        // Find the correct bot client
+        const client = botClients.find(c => c.user?.id === botInfo.botId);
+        if (!client) throw new Error("Bot client not found");
+
+        const guild = client.guilds.cache.get(guildId);
+        if (!guild) throw new Error("Guild not found on bot client");
+
+        // Fetch channel
+        const channel = await guild.channels.fetch(channelId);
+        if (!channel || !channel.isTextBased()) {
+            throw new Error("Channel not found or not text-based");
+        }
+
+        const message = await channel.send({
+            content: content,
+            files: [{ attachment: buffer, name: fileName }]
+        });
+
+        console.log(`File sent to channel ${channelId}`);
+        return message;
+
+    } catch (err: any) {
+        console.error("Error sending file:", err);
+        return err.message;
+    }
+};
+
 
 const botClients: Client[] = [];
 const botMessageCallbacks: Map<string, ((bot: Client, message: Message) => void)[]> = new Map();
@@ -241,8 +331,8 @@ const loginBots = async () => {
     }
 };
 
-const logIn = async (botToken: string) => {
-    const clients: Client[] = [];
+const logInBot = async (botToken: string) => {
+    // const clients: Client[] = [];
     const botClient = new Client({
         intents: [
             GatewayIntentBits.Guilds,
@@ -305,9 +395,9 @@ const logIn = async (botToken: string) => {
     });
 
     await botClient.login(botToken);
-    clients.push(botClient);
+    // clients.push(botClient);
     botClients.push(botClient);
-    return clients;
+    return botClient;
 };
 
 const sendMessage = async (channelId: string, botId: string, guildId: string) => {
@@ -401,8 +491,11 @@ const leaveGuild = async (client: {
 
 export {
     // client,
+    logInBot,
     createChannel,
+    deletChannel,
     sendMessageToChannel,
+    sendFileToChannel,
     // createPrivateChannel,
     // addMemberToChannel,
     loginBots,

@@ -17,6 +17,8 @@ const express_1 = __importDefault(require("express"));
 const responseStatus_1 = __importDefault(require("../helper/responseStatus"));
 const discord_1 = require("../helper/discord");
 const redis_1 = __importDefault(require("../config/redis"));
+const multer_1 = __importDefault(require("multer"));
+const upload = (0, multer_1.default)({ storage: multer_1.default.memoryStorage() });
 const router = express_1.default.Router();
 const handleError = (res, err) => {
     console.error("Endpoint error:", err);
@@ -40,6 +42,7 @@ router.get("/", (req, res) => {
 //   }
 // });
 router.post("/addDiscordData", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b;
     try {
         const { botToken, clientId, clientSecret } = req.body;
         if (!botToken || !clientId || !clientSecret) {
@@ -59,7 +62,12 @@ router.post("/addDiscordData", (req, res) => __awaiter(void 0, void 0, void 0, f
         yield redis_1.default.set(key, JSON.stringify(DiscordData));
         const addBotToTheServerURL = `https://discord.com/oauth2/authorize?client_id=${clientId}&permissions=8&integration_type=0&scope=bot+applications.commands`;
         console.log("Updated DiscordData in Redis:", DiscordData);
-        res.json(responseStatus_1.default.OK(addBotToTheServerURL, "Discord Agent added successfully"));
+        const botClient = yield (0, discord_1.logInBot)(botToken);
+        const client = {
+            tag: (_a = botClient.user) === null || _a === void 0 ? void 0 : _a.tag,
+            id: (_b = botClient.user) === null || _b === void 0 ? void 0 : _b.id.toString() // convert BigInt to string
+        };
+        res.json(responseStatus_1.default.OK({ addBotToTheServerURL, client }, "Discord Agent added successfully"));
     }
     catch (err) {
         console.error("Error in /addDiscordData:", err);
@@ -79,6 +87,37 @@ router.post("/create-channel", (req, res) => __awaiter(void 0, void 0, void 0, f
         handleError(res, err);
     }
 }));
+router.post("/delete-channel", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { channelId, guildId } = req.body;
+        console.log("req.body:", req.body);
+        const result = yield (0, discord_1.deletChannel)(channelId, guildId);
+        res.json({ success: true, result });
+    }
+    catch (err) {
+        handleError(res, err);
+    }
+}));
+router.post("/send-file", upload.single("file"), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { channelId, guildId, content } = req.body;
+        if (!req.file) {
+            return res.status(400).json({ message: "File is required" });
+        }
+        const message = yield (0, discord_1.sendFileToChannel)(channelId, guildId, req.file.buffer, req.file.originalname, content);
+        return res.status(200).json({
+            success: true,
+            message: "File sent successfully",
+            data: message
+        });
+    }
+    catch (err) {
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
+    }
+}));
 router.get("/deleteAllbots", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         yield redis_1.default.del(`DiscordData`);
@@ -93,7 +132,15 @@ router.get("/deleteAllbots", (req, res) => __awaiter(void 0, void 0, void 0, fun
 router.get("/loginBots", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         console.log("loginBots called");
-        const clients = yield (0, discord_1.loginBots)(); // array of Client instances
+        const getDiscordData = yield redis_1.default.get("DiscordData");
+        if (!getDiscordData)
+            return [];
+        const DiscordData = JSON.parse(getDiscordData);
+        const clients = [];
+        for (const item of DiscordData) {
+            const botClient = yield (0, discord_1.logInBot)(item.botToken); // array of Client instances
+            clients.push(botClient);
+        }
         // Map clients to a safe JSON response
         const result = clients.map(c => {
             var _a, _b;
@@ -161,4 +208,5 @@ router.get("/getActiveChatChannels", (req, res) => __awaiter(void 0, void 0, voi
         handleError(res, err);
     }
 }));
+// router.post()
 exports.default = router;

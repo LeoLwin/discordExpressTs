@@ -3,8 +3,12 @@ import express from "express";
 import ServiceBroker from "../broker/broker"
 import ResponseStatus from "../helper/responseStatus";
 import type { Request, Response, NextFunction } from "express";
-import { createChannel, leaveGuild, loginBots, sendMessageToChannel } from "../helper/discord";
+import { createChannel, deletChannel, leaveGuild, logInBot, loginBots, sendFileToChannel, sendMessageToChannel } from "../helper/discord";
 import redis from "../config/redis";
+import { Client } from "discord.js";
+import multer from "multer";
+const upload = multer({ storage: multer.memoryStorage() });
+
 
 const router = express.Router();
 
@@ -61,14 +65,19 @@ router.post("/addDiscordData", async (req: Request, res: Response) => {
     const addBotToTheServerURL = `https://discord.com/oauth2/authorize?client_id=${clientId}&permissions=8&integration_type=0&scope=bot+applications.commands`
 
     console.log("Updated DiscordData in Redis:", DiscordData);
+    const botClient = await logInBot(botToken);
 
-    res.json(ResponseStatus.OK(addBotToTheServerURL, "Discord Agent added successfully"));
+    const client = {
+      tag: botClient.user?.tag,
+      id: botClient.user?.id.toString() // convert BigInt to string
+    };
+
+    res.json(ResponseStatus.OK({ addBotToTheServerURL, client }, "Discord Agent added successfully"));
   } catch (err) {
     console.error("Error in /addDiscordData:", err);
     res.json(ResponseStatus.UNKNOWN(err instanceof Error ? err.message : "Unknown error"));
   }
 });
-
 
 
 router.post("/create-channel", async (req, res) => {
@@ -84,6 +93,52 @@ router.post("/create-channel", async (req, res) => {
   }
 });
 
+router.post("/delete-channel", async (req, res) => {
+  try {
+    const { channelId, guildId } = req.body;
+    console.log("req.body:", req.body);
+    const result = await deletChannel(channelId, guildId);
+    res.json({ success: true, result });
+  } catch (err: any) {
+    handleError(res, err as Error);
+  }
+})
+
+router.post(
+  "/send-file",
+  upload.single("file"),
+  async (req: Request, res: Response) => {
+    try {
+      const { channelId, guildId, content } = req.body;
+
+      if (!req.file) {
+        return res.status(400).json({ message: "File is required" });
+      }
+
+      const message = await sendFileToChannel(
+        channelId,
+        guildId,
+        req.file.buffer,
+        req.file.originalname,
+        content
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: "File sent successfully",
+        data: message
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        message: err.message
+      });
+    }
+  }
+);
+
+
+
 router.get("/deleteAllbots", async (req: Request, res: Response) => {
   try {
     await redis.del(`DiscordData`);
@@ -98,7 +153,18 @@ router.get("/deleteAllbots", async (req: Request, res: Response) => {
 router.get("/loginBots", async (req: Request, res: Response) => {
   try {
     console.log("loginBots called");
-    const clients = await loginBots(); // array of Client instances
+
+    const getDiscordData = await redis.get("DiscordData");
+    if (!getDiscordData) return [];
+
+    const DiscordData: { botToken: string; cliedId: string; clientSecret: string }[] =
+      JSON.parse(getDiscordData);
+    const clients: Client[] = [];
+    for (const item of DiscordData) {
+      const botClient = await logInBot(item.botToken); // array of Client instances
+      clients.push(botClient);
+
+    }
 
     // Map clients to a safe JSON response
     const result = clients.map(c => ({
@@ -112,7 +178,6 @@ router.get("/loginBots", async (req: Request, res: Response) => {
     handleError(res, err as Error);
   }
 });
-
 
 router.get("/getAllbots", async (req: Request, res: Response) => {
   try {
@@ -166,6 +231,8 @@ router.get("/getActiveChatChannels", async (req: Request, res: Response) => {
     handleError(res, err as Error);
   }
 })
+
+// router.post()
 
 export default router;
 

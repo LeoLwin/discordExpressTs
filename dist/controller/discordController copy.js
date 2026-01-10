@@ -76,10 +76,9 @@ router.post("/addDiscordData", (req, res) => __awaiter(void 0, void 0, void 0, f
 }));
 router.post("/create-channel", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { name, guildId, agentIds } = req.body;
+        const { name, guildId } = req.body;
         console.log("req.body:", req.body);
-        // const channel = await createChannel(name, guildId);
-        const channel = yield (0, discord_1.createChannelV2)(guildId, name, agentIds);
+        const channel = yield (0, discord_1.createChannel)(name, guildId);
         // console.log("channel create : ", channel)
         // console.log('hello')
         res.json({ success: true, channelId: channel.id });
@@ -117,18 +116,6 @@ router.post("/send-file", upload.single("file"), (req, res) => __awaiter(void 0,
             success: false,
             message: err.message
         });
-    }
-}));
-router.post("/getServerInviteLink", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { guildId } = req.body;
-        const inviteLink = yield (0, discord_1.getServerInviteLink)(guildId);
-        console.log("inviteLink : ", inviteLink);
-        res.json(responseStatus_1.default.OK(inviteLink, "Invite link fetched successfully"));
-    }
-    catch (err) {
-        console.log("err in getServerInviteLink :", err);
-        handleError(res, err);
     }
 }));
 router.get("/deleteAllbots", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -218,48 +205,6 @@ router.get("/getActiveChatChannels", (req, res) => __awaiter(void 0, void 0, voi
     }
     catch (err) {
         console.log("err in getActiveChatChannels :", err);
-        handleError(res, err);
-    }
-}));
-router.post("/getIdByNames", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { guildId, agentNames } = req.body;
-        const result = yield (0, discord_1.getIdByEmail)(guildId, agentNames);
-        res.json(result);
-    }
-    catch (err) {
-        console.log("err in getActiveChatChannels :", err);
-        handleError(res, err);
-    }
-}));
-router.post("/getNamesById", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { guildId, agentId } = req.body;
-        console.log("req.body : ", req.body);
-        const result = yield (0, discord_1.getNamesById)(guildId, agentId);
-        res.json(result);
-    }
-    catch (error) {
-        console.log("erro in getNamesById  ", error);
-        handleError(res, error);
-    }
-}));
-router.post("/sendMessageAsBot", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { clientId, // bot clientId
-        userId, // target user
-        text, attachmentUrl, filename } = req.body;
-        const result = yield (0, discord_1.sendDMAsBot1)({
-            clientId, // bot clientId
-            userId, // target user
-            text,
-            attachmentUrl,
-            filename,
-        });
-        res.json(responseStatus_1.default.OK(result, "Message sent successfully"));
-    }
-    catch (err) {
-        console.log("err in sendMessageAsBot :", err);
         handleError(res, err);
     }
 }));

@@ -50,6 +50,9 @@ broker_1.default.start().then(() => {
     app.get("/", (req, res) => {
         res.send("Welcome to Discord API");
     });
+    app.get("/callback", (req, res) => {
+        res.send("Welcome to Discord API");
+    });
     app.use("/api", indexController_1.default);
     const PORT = config_1.default.port || 8000;
     app.listen(PORT, "0.0.0.0", () => {

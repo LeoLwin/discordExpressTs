@@ -1,7 +1,10 @@
 import dotenv from "dotenv";
 dotenv.config();
-import { Client, GatewayIntentBits, ChannelType, PermissionFlagsBits, REST, Routes, SlashCommandBuilder, Message } from "discord.js";
+import { Client, GatewayIntentBits, ChannelType, PermissionFlagsBits, REST, Routes, SlashCommandBuilder, Message, GuildMember, OverwriteType, PermissionsBitField, Partials, Guild, Invite, GuildBasedChannel, TextChannel, NewsChannel, AttachmentBuilder } from "discord.js";
 import redis from "../config/redis";
+import StatusCode from "../helper/responseStatus"
+import axios from "axios";
+
 
 const createChannel = async (channelName: string, guildId: string) => {
     console.log("Creating channel with name:", channelName);
@@ -181,11 +184,28 @@ const sendFileToChannel = async (
 };
 
 
+const validateBotCredentials = async (creds: {
+    botToken: string;
+    clientId?: string;
+    clientSecret?: string;
+}) => {
+    // Check bot token
+    const tokenClient = new Client({ intents: [GatewayIntentBits.Guilds] });
+    try {
+        await tokenClient.login(creds.botToken);
+        console.log(" Bot token is valid");
+        tokenClient.destroy();
+    } catch (err: any) {
+        throw new Error(` Invalid bot token: ${err.message}`);
+    }
+}
+
 const botClients: Client[] = [];
 const botMessageCallbacks: Map<string, ((bot: Client, message: Message) => void)[]> = new Map();
 
 const loginBots = async () => {
     try {
+
         const getDiscordData = await redis.get("DiscordData");
         if (!getDiscordData) return [];
 
@@ -198,10 +218,12 @@ const loginBots = async () => {
             const botClient = new Client({
                 intents: [
                     GatewayIntentBits.Guilds,
+                    GatewayIntentBits.GuildMembers,   // ✅ Needed for join events
                     GatewayIntentBits.GuildMessages,
                     GatewayIntentBits.MessageContent,
-                    GatewayIntentBits.GuildMembers
-                ]
+                    GatewayIntentBits.DirectMessages // ✅ Needed for DMs
+                ],
+                partials: [Partials.Channel] // ✅ Needed for DMs
             });
 
             botClient.once("ready", () => {
@@ -319,6 +341,7 @@ const loginBots = async () => {
                 console.log(`[${botTag}] received a message in guild ${guildName} (${guildId}) from ${authorTag}: ${content}`);
             });
 
+
             await botClient.login(item.botToken);
             clients.push(botClient);
             botClients.push(botClient); // store globally if needed
@@ -331,15 +354,20 @@ const loginBots = async () => {
     }
 };
 
-const logInBot = async (botToken: string) => {
+const logInBot = async (botToken: string, clientId: string, clientSecret: string) => {
     // const clients: Client[] = [];
+    // Validate credentials first
+    await validateBotCredentials({ botToken, clientId, clientSecret })
+
     const botClient = new Client({
         intents: [
-            GatewayIntentBits.Guilds,
+            GatewayIntentBits.Guilds,          // Required for guild info
+            GatewayIntentBits.GuildMembers,    // ✅ Required to detect joins
+            GatewayIntentBits.DirectMessages,  // Required if you want to DM users
             GatewayIntentBits.GuildMessages,
-            GatewayIntentBits.MessageContent,
-            GatewayIntentBits.GuildMembers
-        ]
+            GatewayIntentBits.MessageContent
+        ],
+        partials: [Partials.Channel]         // Required to send DMs
     });
 
     botClient.once("ready", () => {
@@ -367,38 +395,285 @@ const logInBot = async (botToken: string) => {
         await putTheGuildIdTotheClient(botUser, guild.id)
     });
 
-    botClient.on("messageCreate", (message) => {
+
+    botClient.on("messageCreate", async (message) => {
         // botClient.user gives the bot itself
         if (message.author.bot) {
             console.log("Message from bot, ignoring.");
             return
         };
-        const botTag = botClient.user?.tag;   // e.g., "KHL#8511"
-        const botId = botClient.user?.id;     // e.g., "1446061847798218786"
-        console.log("User message:", message.content);
-
-        // message.guild gives the server the message came from
-        const guildId = message.guild?.id;    // e.g., "1457680812530208965"
-        const guildName = message.guild?.name;
-
-        const authorTag = message.author.tag; // who sent the message
-        const content = message.content;      // message content
-
-        const channelId = message.channel.id;
-
-        console.log("Channel ID  :", channelId);
-
-        sendMessage(channelId, botId!, guildId!);
 
 
-        console.log(`[${botTag}] received a message in guild ${guildName} (${guildId}) from ${authorTag}: ${content}`);
+        if (message.channel.isDMBased()) {
+            console.log("DM received:", {
+                from: message.author.tag,
+                userId: message.author.id,
+                content: message.content,
+                chatId: message.channel.id
+
+            });
+
+            const chatId = message.channel.id;
+
+            const text = message.content;
+
+            let attachmentUrl: string | undefined;
+            let attachmentType: string | null | undefined;
+            let attachmentName: string | undefined;
+
+            const attachment = message.attachments.first();
+            if (attachment) {
+                attachmentUrl = attachment.url;
+                attachmentType = attachment.contentType?.split("/")[0] ?? null;
+                attachmentName = attachment.name;
+
+                console.log("Attachment info:", {
+                    name: attachment.name,
+                    url: attachment.url,
+                    size: attachment.size,
+                    contentType: attachment.contentType
+                });
+            }
+
+            console.log("DM received:", {
+                from: message.author.tag,
+                userId: message.author.id,
+                content: text,
+                attachmentType,
+                attachmentUrl
+            });
+
+
+
+            // Reply back
+            await message.reply("Thanks for your message! We’ll get back to you soon.");
+            await message.author.send(
+                "Thanks for your message! We’ll get back to you soon."
+            );
+        }
+
+
+        // const botTag = botClient.user?.tag;   // e.g., "KHL#8511"
+        // const botId = botClient.user?.id;     // e.g., "1446061847798218786"
+        // console.log("User message:", message.content);
+
+        // // message.guild gives the server the message came from
+        // const guildId = message.guild?.id;    // e.g., "1457680812530208965"
+        // const guildName = message.guild?.name;
+
+        // const authorTag = message.author.tag; // who sent the message
+        // const content = message.content;      // message content
+
+        // const channelId = message.channel.id;
+
+        // if (message.attachments.size > 0) {
+        //     console.log(`This message has ${message.attachments.size} attachment(s)`);
+
+        //     message.attachments.forEach(async attachment => {
+        //         console.log("Attachment info:", {
+        //             name: attachment.name,
+        //             url: attachment.url,
+        //             size: attachment.size,
+        //             contentType: attachment.contentType
+        //         });
+        //         // attachmentType = attachment.contentType;
+        //         // attachmentUrl = attachment.url
+
+        //         // Optional: Download the file if needed
+        //         // const response = await axios.get(attachment.url, { responseType: "arraybuffer" });
+        //         // const fileBuffer = Buffer.from(response.data);
+        //         // console.log(`Downloaded file ${attachment.name} (${fileBuffer.length} bytes)`);
+        //     });
+        // }
+
+        // // Log basic message info
+        // const userId = message.author.id;        // Discord user ID
+        // const username = message.author.username; // Username (without discriminator)
+        // const userTag = message.author.tag;
+
+        // let attachmentUrl: string | undefined;
+        // let attachmentType: string | null | undefined;
+        // let attachmentName: string | undefined;
+        // const attachment = message.attachments.first();
+        // console.log("attachment : ", attachment)
+        // if (attachment) {
+        //     attachmentUrl = attachment.url;
+        //     attachmentType = attachment.contentType?.split("/")[0] ?? null;
+        //     attachmentName = attachment.name
+        // }
+
+        // console.log("Message received:", {
+        //     channel: message.channel.id,
+        //     userId,
+        //     username,
+        //     userTag,
+        //     content: message.content,
+        //     attachmentUrl,
+        //     attachmentType,
+        //     attachmentName
+        // });
+
+        // // console.log("File Split : ", attachmentType?.split("/")[0])
+
+        // const para = {
+        //     userId,
+        //     username: username,
+        //     chatId: message.channel.id,
+        //     text: message.content
+        // };
+
+        // if (message.attachments.size > 0) {
+        //     console.log(`This message has ${message.attachments.size} attachment(s)`);
+
+        //     message.attachments.forEach(async attachment => {
+        //         console.log("Attachment info:", {
+        //             name: attachment.name,
+        //             url: attachment.url,
+        //             size: attachment.size,
+        //             contentType: attachment.contentType
+        //         });
+        //         // attachmentType = attachment.contentType;
+        //         // attachmentUrl = attachment.url
+
+        //         // Optional: Download the file if needed
+        //         // const response = await axios.get(attachment.url, { responseType: "arraybuffer" });
+        //         // const fileBuffer = Buffer.from(response.data);
+        //         // console.log(`Downloaded file ${attachment.name} (${fileBuffer.length} bytes)`);
+        //     });
+        // }
+
+        // sendMessage(channelId, botId!, guildId!);
+
+        // console.log(`[${botTag}] received a message in guild ${guildName} (${guildId}) from ${authorTag}: ${content}`);
     });
+
+    botClient.on("guildMemberAdd", async (member) => {
+        try {
+            await member.send(`Welcome to ${member.guild.name}!`);
+        } catch {
+            const channel = member.guild.systemChannel; // Default system channel
+            if (channel) channel.send(`Welcome to the server, ${member.user.tag}!`);
+        }
+    });
+
+
+
 
     await botClient.login(botToken);
     // clients.push(botClient);
     botClients.push(botClient);
     return botClient;
 };
+
+
+const loginBot2 = async (botToken: string, clientId: string, clientSecret: string) => {
+    return new Promise(async (resolve) => {
+        try {
+            const client = new Client({
+                intents: [
+                    GatewayIntentBits.Guilds,
+                    GatewayIntentBits.GuildMessages,
+                    GatewayIntentBits.MessageContent
+                ]
+            });
+
+            client.on("error", (error) => {
+                console.log("Discord client error:", error);
+                resolve(StatusCode.UNKNOWN(`Discord client error: ${error.message}`));
+            });
+
+            client.once("clientReady", () => {
+                const botId = client.user!.id;
+                console.log(`Logged in: ${client.user!.tag}`);
+                resolve(StatusCode.OK("Bot logged in successfully."));
+                console.log("Storing client for botId:", botId);
+                // clients.set(botId, client);
+            });
+
+            client.on("messageCreate", async message => {
+                try {
+                    // Ignore bot messages
+                    if (message.author.bot) return;
+
+                    // Only messages in a guild
+                    if (!message.guild) return;
+
+                    // Handle text content
+                    if (message.content) {
+                        // Example command
+                        if (message.content === "!ping") {
+                            await message.reply("pong");
+                        }
+
+                        // Any other text handling
+                        console.log("Text message:", message.content);
+                    }
+
+                    const text = message.content
+                    let attachmentUrl: string | undefined;
+                    let attachmentType: string | null | undefined;
+                    let attachmentName: string | undefined;
+                    //  Handle attachments (files/images/etc.)
+                    if (message.attachments.size > 0) {
+                        console.log(`This message has ${message.attachments.size} attachment(s)`);
+
+                        message.attachments.forEach(async attachment => {
+                            console.log("Attachment info:", {
+                                name: attachment.name,
+                                url: attachment.url,
+                                size: attachment.size,
+                                contentType: attachment.contentType
+                            });
+                            // attachmentType = attachment.contentType;
+                            // attachmentUrl = attachment.url
+
+                            // Optional: Download the file if needed
+                            // const response = await axios.get(attachment.url, { responseType: "arraybuffer" });
+                            // const fileBuffer = Buffer.from(response.data);
+                            // console.log(`Downloaded file ${attachment.name} (${fileBuffer.length} bytes)`);
+                        });
+                    }
+
+                    // Log basic message info
+                    const userId = message.author.id;        // Discord user ID
+                    const username = message.author.username; // Username (without discriminator)
+                    const userTag = message.author.tag;
+
+                    const attachment = message.attachments.first();
+                    console.log("attachment : ", attachment)
+                    if (attachment) {
+                        attachmentUrl = attachment.url;
+                        attachmentType = attachment.contentType?.split("/")[0] ?? null;;
+                        attachmentName = attachment.name
+                    }
+
+                    console.log("Message received:", {
+                        bot: client.user?.tag,
+                        guild: message.guild.name,
+                        channel: message.channel.id,
+                        userId,
+                        username,
+                        userTag,
+                        content: message.content,
+                        attachmentUrl,
+                        attachmentType,
+                        attachmentName
+                    });
+
+
+
+                } catch (err) {
+                    console.error("Error handling message:", err);
+                }
+            });
+
+            // await client.login(creds.botToken);
+        } catch (error: any) {
+            console.log("Error logging in bot:", error.message);
+            resolve(StatusCode.UNKNOWN(`Error logging in bot: ${error.message}`));
+        }
+    })
+}
 
 const sendMessage = async (channelId: string, botId: string, guildId: string) => {
     console.log("-----------------------------------------------");
@@ -489,15 +764,341 @@ const leaveGuild = async (client: {
 };
 //  const createPrivateChannel = async (channelName: string, allowedMemberIds: string[] = []) => {
 
+const getIdByEmail = async (guildId: string, agentNames: string[]) => {
+    try {
+        console.log("Get Names from email:", agentNames);
+        let guild: any;
+
+        const key = "DiscordData";
+        const getData = await redis.get(key);
+        console.log("getData from Redis :", JSON.stringify(getData));
+        if (!getData) throw new Error("No Discord data found in Redis");
+        const DiscordData: { botToken: string; clientId: string; clientSecret: string, guildId?: string }[] =
+            JSON.parse(getData);
+        const botInfo = DiscordData.find(d => d.guildId === guildId);
+        console.log("botInfo :", botInfo);
+        if (!botInfo) throw new Error("No bot found for the specified guildId");
+        // console.log("botClients :", botClients?[0].user.id);
+        guild = botClients.find(c => c.user?.id === botInfo.clientId);
+
+        console.log("Bot client found for guildId:", guild);
+        if (!guild) throw new Error("Bot client not found");
+        console.log("Guild fetched:", guild.id);
+        const guildObj = guild.guilds.cache.get(guildId);
+        if (!guildObj) throw new Error("Guild not found on bot client");
+
+        // Fetch all members of the guild (make sure your bot has the GUILD_MEMBERS intent!)
+        await guildObj.members.fetch();
+        console.log("UserNames : ", guildObj.members.cache)
+
+        // Map agentNames to their user IDs
+        const userIds = agentNames.map(name => {
+            const member = guildObj.members.cache.find((m: GuildMember) => m.user.username === name);
+            return member ? member.user.id : null;
+        }).filter(id => id !== null);
+
+        return userIds; // array of user IDs
+    } catch (error: any) {
+        console.log("Error on getIdByEmail:", error.message);
+        return [];
+    }
+};
+
+
+const getNamesById = async (guildId: string, agentId: string) => {
+    try {
+        console.log("Get agentNames from id:", { guildId, agentId });
+        let guild: any;
+
+        const key = "DiscordData";
+        const getData = await redis.get(key);
+        console.log("getData from Redis :", JSON.stringify(getData));
+        if (!getData) throw new Error("No Discord data found in Redis");
+        const DiscordData: { botToken: string; clientId: string; clientSecret: string, guildId?: string }[] =
+            JSON.parse(getData);
+        const botInfo = DiscordData.find(d => d.guildId === guildId);
+        console.log("botInfo :", botInfo);
+        if (!botInfo) throw new Error("No bot found for the specified guildId");
+        // console.log("botClients :", botClients?[0].user.id);
+        guild = botClients.find(c => c.user?.id === botInfo.clientId);
+
+        console.log("Bot client found for guildId:", guild);
+        if (!guild) throw new Error("Bot client not found");
+        console.log("Guild fetched:", guild.id);
+        const guildObj = guild.guilds.cache.get(guildId);
+        if (!guildObj) throw new Error("Guild not found on bot client");
+
+        // Fetch all members of the guild (make sure your bot has the GUILD_MEMBERS intent!)
+        await guildObj.members.fetch();
+
+        await guildObj.members.fetch();
+        const member = guildObj.members.cache.get(agentId); // get member by userId
+
+
+        if (member) {
+            console.log("Username:", member.user.username); // e.g., "Test1"
+            console.log("Full tag:", member.user.tag);       // e.g., "Test1#1234"
+            return { name: member.user.username, tag: member.user.tag };
+
+        } else {
+            console.log("Member not found in guild");
+            return 'NO user found.'
+        }
+    } catch (error: any) {
+        console.log("Error on getIdByEmail:", error.message);
+        return [];
+    }
+};
+
+
+
+const createChannelV2 = async (guildId: string, name: string, allowedUserIds: string[]) => {
+    try {
+        // console.log("Get agentNames from id:", { guildId, agentId });
+        let guild: any;
+
+        const key = "DiscordData";
+        const getData = await redis.get(key);
+        console.log("getData from Redis :", JSON.stringify(getData));
+        if (!getData) throw new Error("No Discord data found in Redis");
+        const DiscordData: { botToken: string; clientId: string; clientSecret: string, guildId?: string }[] =
+            JSON.parse(getData);
+        console.log("discrdData : ", DiscordData)
+        const botInfo = DiscordData.find(d => d.guildId === guildId);
+        console.log("botInfo :", botInfo);
+        if (!botInfo) throw new Error("No bot found for the specified guildId");
+        // console.log("botClients :", botClients?[0].user.id);
+        guild = botClients.find(c => c.user?.id === botInfo.clientId);
+
+        console.log("Bot client found for guildId:", guild);
+        if (!guild) throw new Error("Bot client not found");
+        console.log("Guild fetched:", guild.id);
+        // const guildObj = guild.guilds.cache.get(guildId);
+        // if (!guildObj) throw new Error("Guild not found on bot client");
+
+        // const guild = client.guilds.cache.get(guildId);
+        guild = await guild.guilds.fetch(guildId);
+        // if (!guild) throw new Error("Guild not found");
+        await guild.members.fetch();
+
+
+        // const permissionOverwrites = [
+        //     {
+        //         id: guild.roles.everyone.id, // @everyone role
+        //         deny: [PermissionsBitField.Flags.ViewChannel] // deny view for everyone
+        //     },
+        //     ...allowedUserIds.map(userId => ({
+        //         id: userId,
+        //         allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] // allow access
+        //     }))
+        // ];
+
+        const permissionOverwrites = [
+            {
+                id: guild.roles.everyone.id,
+                type: OverwriteType.Role,
+                deny: [PermissionsBitField.Flags.ViewChannel],
+            },
+            ...allowedUserIds.map(userId => ({
+                id: userId,
+                type: OverwriteType.Member,
+                allow: [
+                    PermissionsBitField.Flags.ViewChannel,
+                    PermissionsBitField.Flags.SendMessages,
+                ],
+            })),
+        ];
+
+
+
+        const channel = await guild.channels.create({
+            name: name,
+            type: ChannelType.GuildText,
+            permissionOverwrites
+        });
+
+
+        console.log(`Channel created: ${channel.name} (${channel.id})`);
+        return StatusCode.OK(channel);
+
+    } catch (err: any) {
+        // Catch any error
+        console.error("Error creating channel:", err.message || err);
+        // Optionally return null or throw again
+        return StatusCode.UNKNOWN(err.message);
+    }
+}
+
+
+const getServerInviteLink = async (guildId: string) => {
+    try {
+        const key = "DiscordData";
+        const getData = await redis.get(key);
+        if (!getData) throw new Error("No Discord data found in Redis");
+
+        const DiscordData = JSON.parse(getData) as { botToken: string; clientId: string; guildId?: string }[];
+        const botInfo = DiscordData.find(d => d.guildId === guildId);
+        if (!botInfo) throw new Error("No bot found for the specified guildId");
+
+        const client = botClients.find(c => c.user?.id === botInfo.clientId);
+        if (!client) throw new Error("Bot client not found");
+
+        const guild = client.guilds.cache.get(guildId);
+        if (!guild) throw new Error("Guild not found for the bot");
+
+        console.log("Guild fetched:", guild.id);
+
+        // Try fetching existing invites
+        const invites = await guild.invites.fetch();
+        if (invites.size > 0) {
+            return invites.first()!.url;
+        }
+
+        // Create new invite
+        const channel = guild.channels.cache.find(
+            (ch): ch is TextChannel | NewsChannel =>
+                (ch.isTextBased() && !ch.isThread()) &&
+                ch.permissionsFor(guild.members.me!)?.has(PermissionsBitField.Flags.CreateInstantInvite)
+        );
+
+        if (!channel) return null;
+
+        const invite = await channel.createInvite({
+            maxAge: 0,
+            maxUses: 0,
+            unique: true
+        });
+
+        return invite.url;
+
+    } catch (error) {
+        console.error("Error creating server invite:", error);
+        return null;
+    }
+};
+
+
+
+
+
+const sendMessageAsBot0 = async (params: {
+    guildId: string,
+    text: string,
+    attachmentUrl?: string,
+    filename?: string,
+    chatId: string
+
+}) => {
+    let { guildId, text: content, attachmentUrl, filename, chatId } = params;
+    // const channelId = ""
+    try {
+        const key = "DiscordData";
+        const getData = await redis.get(key);
+        if (!getData) throw new Error("No Discord data found in Redis");
+
+        const DiscordData = JSON.parse(getData) as { botToken: string; clientId: string; guildId?: string }[];
+        const botInfo = DiscordData.find(d => d.guildId === guildId);
+        if (!botInfo) throw new Error("No bot found for the specified guildId");
+
+        const client = botClients.find(c => c.user?.id === botInfo.clientId);
+        if (!client) throw new Error("Bot client not found");
+
+        const guild = client.guilds.cache.get(guildId);
+        if (!guild) throw new Error("Guild not found for the bot");
+
+        console.log("Guild fetched:", guild.id);
+        const channel = await guild.channels.fetch(chatId);
+
+        if (attachmentUrl) {
+            if (!filename) filename = new URL(attachmentUrl).pathname.split('/').pop();
+            const response = await axios.get(attachmentUrl, { responseType: 'arraybuffer' });
+            const fileBuffer = Buffer.from(response.data, 'binary');
+            await (channel as any).send({ content, files: [{ attachment: fileBuffer, name: filename }] });
+        } else {
+            await (channel as any).send(content);
+        }
+        return StatusCode.OK("Message Send Succesfully.")
+    }
+    catch (err: any) {
+        // Catch any error
+        console.error("Error creating channel:", err.message || err);
+        // Optionally return null or throw again
+        return StatusCode.UNKNOWN(err.message);
+    }
+}
+
+const sendDMAsBot1 = async (params: {
+    clientId: string;   // bot clientId
+    userId: string;     // target user
+    text: string;
+    attachmentUrl?: string;
+    filename?: string;
+}) => {
+    try {
+        const { clientId, userId, text, attachmentUrl, filename } = params;
+
+        const client = botClients.find(c => c.user?.id === clientId);
+        if (!client) throw new Error("Bot client not found");
+
+        // 1. Fetch user
+        const user = await client.users.fetch(userId);
+
+        // 2. Create / get DM channel
+        const dmChannel = await user.createDM();
+
+        // 3. Send message
+        if (attachmentUrl) {
+            const name =
+                filename ??
+                new URL(attachmentUrl).pathname.split("/").pop() ??
+                "file";
+
+            const response = await axios.get(attachmentUrl, {
+                responseType: "arraybuffer",
+                validateStatus: () => true
+            });
+
+            if (!response.data || response.data.byteLength === 0) {
+                throw new Error("Downloaded attachment is empty");
+            }
+
+            const attachment = new AttachmentBuilder(
+                Buffer.from(response.data),
+                { name }
+            );
+
+            await dmChannel.send({
+                content: text,
+                files: [attachment]
+            });
+        } else {
+            await dmChannel.send(text);
+        }
+
+
+        return StatusCode.OK("DM sent successfully");
+    } catch (err: any) {
+        console.error("Error sending DM:", err);
+        return StatusCode.UNKNOWN(err.message);
+    }
+};
+
+
 export {
     // client,
     logInBot,
+    loginBot2,
     createChannel,
     deletChannel,
     sendMessageToChannel,
     sendFileToChannel,
+    getIdByEmail,
+    getNamesById,
+    createChannelV2,
+    sendDMAsBot1,
     // createPrivateChannel,
     // addMemberToChannel,
+    getServerInviteLink,
     loginBots,
     leaveGuild
 }

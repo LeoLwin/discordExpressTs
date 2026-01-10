@@ -3,7 +3,7 @@ import express from "express";
 import ServiceBroker from "../broker/broker"
 import ResponseStatus from "../helper/responseStatus";
 import type { Request, Response, NextFunction } from "express";
-import { createChannel, createChannelV2, deletChannel, getIdByEmail, getNamesById, getServerInviteLink, leaveGuild, logInBot, loginBots, sendDMAsBot1, sendFileToChannel, sendMessageToChannel } from "../helper/discord";
+import { createChannel, deletChannel, getIdByEmail, leaveGuild, logInBot, loginBots, sendFileToChannel, sendMessageToChannel } from "../helper/discord";
 import redis from "../config/redis";
 import { Client } from "discord.js";
 import multer from "multer";
@@ -81,11 +81,9 @@ router.post("/addDiscordData", async (req: Request, res: Response) => {
 
 router.post("/create-channel", async (req, res) => {
   try {
-    const { name, guildId, agentIds } = req.body;
+    const { name, guildId } = req.body;
     console.log("req.body:", req.body);
-    // const channel = await createChannel(name, guildId);
-    const channel: any = await createChannelV2(guildId, name, agentIds);
-
+    const channel = await createChannel(name, guildId);
     // console.log("channel create : ", channel)
     // console.log('hello')
     res.json({ success: true, channelId: channel.id });
@@ -137,20 +135,6 @@ router.post(
     }
   }
 );
-
-router.post("/getServerInviteLink", async (req: Request, res: Response) => {
-  try {
-    const { guildId } = req.body;
-    const inviteLink = await getServerInviteLink(guildId);
-    console.log("inviteLink : ", inviteLink);
-    res.json(ResponseStatus.OK(inviteLink, "Invite link fetched successfully"));
-  } catch (err) {
-    console.log("err in getServerInviteLink :", err);
-    handleError(res, err as Error);
-  }
-})
-
-
 
 router.get("/deleteAllbots", async (req: Request, res: Response) => {
   try {
@@ -244,54 +228,16 @@ router.get("/getActiveChatChannels", async (req: Request, res: Response) => {
   }
 })
 
-router.post("/getIdByNames", async (req: Request, res: Response) => {
-  try {
-    const { guildId, agentNames } = req.body
-    const result = await getIdByEmail(guildId, agentNames);
-    res.json(result)
-  } catch (err) {
-    console.log("err in getActiveChatChannels :", err);
-    handleError(res, err as Error);
-  }
-})
-
-router.post("/getNamesById", async (req: Request, res: Response) => {
-  try {
-    const { guildId, agentId } = req.body;
-    console.log("req.body : ", req.body)
-    const result = await getNamesById(guildId, agentId);
-    res.json(result)
-
-  } catch (error) {
-    console.log("erro in getNamesById  ", error);
-    handleError(res, error as Error)
-  }
-})
-
-router.post("/sendMessageAsBot", async (req: Request, res: Response) => {
-  try {
-
-    const { clientId,   // bot clientId
-      userId,  // target user
-      text,
-      attachmentUrl,
-      filename } = req.body;
-
-
-    const result = await sendDMAsBot1({
-      clientId,  // bot clientId
-      userId,     // target user
-      text,
-      attachmentUrl,
-      filename,
-    });
-    res.json(ResponseStatus.OK(result, "Message sent successfully"));
-  } catch (err) {
-    console.log("err in sendMessageAsBot :", err);
-    handleError(res, err as Error);
-  }
-})
-
+// router.post("/getIdByNames", async (req: Request, res: Response) => {
+//   try {
+//     const { clientid, guildId, agentNames } = req.body
+//     const result = await getIdByEmail(guildId, agentNames)
+//     res.json(ResponseStatus.OK("Fetched IDs successfully", result));
+//   } catch (err) {
+//     console.log("err in getActiveChatChannels :", err);
+//     handleError(res, err as Error);
+//   }
+// })
 
 // router.post()
 

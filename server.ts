@@ -18,6 +18,10 @@ ServiceBroker.start().then(() => {
     res.send("Welcome to Discord API");
   });
 
+  app.get("/callback", (req: any, res: any) => {
+    res.send("Welcome to Discord API");
+  });
+
   app.use("/api", indexController);
 
   const PORT = config.port || 8000;

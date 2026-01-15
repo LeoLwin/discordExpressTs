@@ -37,7 +37,7 @@ const createChannel = async (channelName: string, guildId: string) => {
     const activeChatChannelskey = "ActiveChatChannels";
     const getActiveChatChannels = await redis.get(activeChatChannelskey);
     let activeChatChannels: { channelName: string; guildId: string; channelId: string; botId: string }[] = [];
-    console.log("getActiveChatChannels :", getActiveChatChannels);
+    console.log("getActiveChatChannels 40:", getActiveChatChannels);
     if (getActiveChatChannels) {
         activeChatChannels = JSON.parse(getActiveChatChannels);
         activeChatChannels.push({ channelName, guildId, channelId: result.id, botId: botInfo.clientId });
@@ -56,7 +56,7 @@ const createChannel = async (channelName: string, guildId: string) => {
 }
 
 
-const deletChannel = async (channelId: string, guildId: string) => {
+const deleteChannel = async (channelId: string, guildId: string) => {
     try {
         console.log("Delete channel with channelId:", { channelId, guildId });
         let guild: any;
@@ -91,6 +91,42 @@ const deletChannel = async (channelId: string, guildId: string) => {
         return error.message
     }
 }
+
+// const deleteChannel = async (channelId: string, guildId: string) => {
+//     try {
+//         console.log("Delete channel:", { channelId, guildId });
+
+//         const getData = await redis.get("DiscordData");
+//         if (!getData) throw new Error("No Discord data found in Redis");
+
+//         const DiscordData = JSON.parse(getData);
+//         const botInfo = DiscordData.find((d: any) => d.guildId === guildId);
+//         if (!botInfo) throw new Error("No bot found for this guild");
+
+//         const botClient = botClients.find(c => c.user?.id === botInfo.clientId);
+//         if (!botClient) throw new Error("Bot client not found");
+
+//         const guild = botClient.guilds.cache.get(guildId);
+//         if (!guild) throw new Error("Guild not found on bot");
+
+//         const channel = await guild.channels.fetch(channelId);
+//         if (!channel) throw new Error("Channel not found");
+
+//         // if (!channel) {
+//         //     throw new Error("Bot has no permission to delete this channel");
+//         // }
+
+//         await channel.delete("Deleted by bot");
+//         console.log("Channel deleted successfully");
+
+//         return "Channel deleted successfully";
+//     } catch (error: any) {
+//         console.error("Delete channel error:", error);
+//         return error.message;
+//     }
+// };
+
+
 const sendMessageToChannel = async (channelId: string, content: string, guildId: string) => {
     try {
         console.log("Sending message to channelId:", { channelId, content, guildId });
@@ -98,11 +134,13 @@ const sendMessageToChannel = async (channelId: string, content: string, guildId:
         let guild: any;
 
         const key = "ActiveChatChannels";
-        const getActiveChatChannels = await redis.get(key);
-        console.log("getData from Redis :", JSON.stringify(getActiveChatChannels));
-        if (!getActiveChatChannels) throw new Error("No activeChatChannels data found in Redis");
-        let activeChatChannels: { channelName: string; guildId: string; channelId: string; botId: string }[] = [] =
-            JSON.parse(getActiveChatChannels);
+        // const getActiveChatChannels = await redis.get(key);
+        const activeChatChannels = [{ channelName: "general", guildId: guildId, channelId: channelId, botId: "1446061847798218786" }];
+        // console.log("getData from Redis :", JSON.stringify(getActiveChatChannels));
+
+        // if (!getActiveChatChannels) throw new Error("No activeChatChannels data found in Redis");
+        // let activeChatChannels: { channelName: string; guildId: string; channelId: string; botId: string }[] = [] =
+        //     JSON.parse(getActiveChatChannels);
         const botInfo = activeChatChannels.find(d => d.guildId === guildId);
         console.log("botInfo :", botInfo);
         if (!botInfo) throw new Error("No bot found for the specified guildId");
@@ -294,6 +332,8 @@ const loginBots = async () => {
             // Optional: Listen to messages for this bot
             botClient.on("messageCreate", (message) => {
                 // botClient.user gives the bot itself
+                console.log("New message received 297 :", message.id);
+
                 if (message.author.bot) {
                     console.log("Message from bot, ignoring.");
                     return
@@ -319,7 +359,7 @@ const loginBots = async () => {
                     const key = "ActiveChatChannels";
                     const getActiveChatChannels = await redis.get(key);
                     let activeChatChannels: { channelName: string; guildId: string; channelId: string; botId: string }[] = [];
-                    console.log("getActiveChatChannels :", getActiveChatChannels);
+                    console.log("getActiveChatChannels 360:", getActiveChatChannels);
                     if (getActiveChatChannels) {
                         activeChatChannels = JSON.parse(getActiveChatChannels);
                         const channelInfo = activeChatChannels.find(ac => ac.channelId === channelId && ac.botId === botId && ac.guildId === guildId);
@@ -370,7 +410,7 @@ const logInBot = async (botToken: string, clientId: string, clientSecret: string
         partials: [Partials.Channel]         // Required to send DMs
     });
 
-    botClient.once("ready", () => {
+    botClient.once("clientReady", () => {
         console.log(`Bot logged in as ${botClient.user?.tag}`);
         console.log(`Bot ID   : ${botClient.user?.id}`);
         console.log(`Bot Tag  : ${botClient.user?.tag}`);
@@ -398,10 +438,42 @@ const logInBot = async (botToken: string, clientId: string, clientSecret: string
 
     botClient.on("messageCreate", async (message) => {
         // botClient.user gives the bot itself
+        console.log("New message received 401 :", message.id);
         if (message.author.bot) {
             console.log("Message from bot, ignoring.");
             return
         };
+        console.log("Message Data 406:", message);
+
+        const userId = message.author.id;
+        const username = message.author.username;
+        const userTag = message.author.tag;
+        const receivedMessage = message.content;
+        let attachmentUrl: string | undefined;
+        let attachmentType: string | null | undefined;
+        let attachmentName: string | undefined;
+
+        // Channel info
+        const channelId = message.channel.id;
+        const channelName = message.channel.isDMBased() ? undefined : (message.channel as any).name; // undefined in DMs
+
+        // Guild (server) info
+        const guildId = message.guild?.id || null; // null if DM
+        const guildName = message.guild?.name || null;
+
+        console.log("Message Data:", {
+            userId,
+            username,
+            userTag,
+            receivedMessage,
+            channelId,
+            channelName,
+            guildId,
+            guildName,
+            attachmentUrl,
+            attachmentType,
+            attachmentName
+        });
 
 
         if (message.channel.isDMBased()) {
@@ -591,6 +663,7 @@ const loginBot2 = async (botToken: string, clientId: string, clientSecret: strin
             });
 
             client.on("messageCreate", async message => {
+                console.log("New message received 595 :", message.id);
                 try {
                     // Ignore bot messages
                     if (message.author.bot) return;
@@ -681,7 +754,9 @@ const sendMessage = async (channelId: string, botId: string, guildId: string) =>
     const key = "ActiveChatChannels";
     const getActiveChatChannels = await redis.get(key);
     let activeChatChannels: { channelName: string; guildId: string; channelId: string; botId: string }[] = [];
-    console.log("getActiveChatChannels :", getActiveChatChannels);
+    // let activeChatChannels: { channelName:  guildId: string; channelId: string; botId: string }[] = [];
+
+    console.log("getActiveChatChannels 748:", getActiveChatChannels);
     if (getActiveChatChannels) {
         activeChatChannels = JSON.parse(getActiveChatChannels);
         const channelInfo = activeChatChannels.find(ac => ac.channelId === channelId && ac.botId === botId && ac.guildId === guildId);
@@ -972,13 +1047,45 @@ const getServerInviteLink = async (guildId: string) => {
         return invite.url;
 
     } catch (error) {
-        console.error("Error creating server invite:", error);
-        return null;
+
     }
 };
 
 
+const getAppInfo = async (botToken: string) => {
+    try {
+        const res = await axios.get(
+            "https://discord.com/api/v10/oauth2/applications/@me",
+            {
+                headers: {
+                    Authorization: `Bot ${botToken}`,
+                },
+            }
+        );
 
+        // Only log or return the actual data
+        console.log("Discord App Info:", res.data);
+        const responseData = {
+            appId: res.data.id,
+            appName: res.data.name,
+            botId: res.data.bot.id,
+            botName: res.data.bot.username,
+            ownerId: res.data.owner.id,
+            ownerName: res.data.owner.username
+        }
+
+        return responseData;
+
+    } catch (error: any) {
+        // For axios errors, get response if available
+        if (error.response) {
+            console.error("Discord API Error:", error.response.data);
+        } else {
+            console.error("Unknown Error:", error.message);
+        }
+        return null;
+    }
+};
 
 
 const sendMessageAsBot0 = async (params: {
@@ -1089,18 +1196,20 @@ export {
     logInBot,
     loginBot2,
     createChannel,
-    deletChannel,
+    deleteChannel,
     sendMessageToChannel,
     sendFileToChannel,
     getIdByEmail,
     getNamesById,
     createChannelV2,
     sendDMAsBot1,
+    sendMessage,
     // createPrivateChannel,
     // addMemberToChannel,
     getServerInviteLink,
     loginBots,
-    leaveGuild
+    leaveGuild,
+    getAppInfo
 }
 
 

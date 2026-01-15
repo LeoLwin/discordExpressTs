@@ -88,17 +88,16 @@ router.post("/create-channel", (req, res) => __awaiter(void 0, void 0, void 0, f
         handleError(res, err);
     }
 }));
-router.post("/delete-channel", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { channelId, guildId } = req.body;
-        console.log("req.body:", req.body);
-        const result = yield (0, discord_1.deletChannel)(channelId, guildId);
-        res.json({ success: true, result });
-    }
-    catch (err) {
-        handleError(res, err);
-    }
-}));
+// router.post("/delete-channel", async (req, res) => {
+//   try {
+//     const { channelId, guildId } = req.body;
+//     console.log("req.body:", req.body);
+//     const result = await deleteChannel(channelId, guildId);
+//     res.json({ success: true, result });
+//   } catch (err: any) {
+//     handleError(res, err as Error);
+//   }
+// })
 router.post("/send-file", upload.single("file"), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { channelId, guildId, content } = req.body;
@@ -204,6 +203,7 @@ router.post("/sendMessageToChannel", (req, res) => __awaiter(void 0, void 0, voi
     try {
         const { channelId, guildId, content } = req.body;
         const result = yield (0, discord_1.sendMessageToChannel)(channelId, content, guildId);
+        // const result = await sendMessage(channelId, content, guildId);
         res.json(responseStatus_1.default.OK(result, "Message sent successfully"));
     }
     catch (err) {
@@ -260,6 +260,17 @@ router.post("/sendMessageAsBot", (req, res) => __awaiter(void 0, void 0, void 0,
     }
     catch (err) {
         console.log("err in sendMessageAsBot :", err);
+        handleError(res, err);
+    }
+}));
+router.post("/getAppInfo", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { clientId } = req.body;
+        const result = yield (0, discord_1.getAppInfo)(clientId);
+        res.json(responseStatus_1.default.OK(result, "App info fetched successfully"));
+    }
+    catch (err) {
+        console.log("err in getAppInfo :", err);
         handleError(res, err);
     }
 }));

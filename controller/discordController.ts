@@ -3,7 +3,7 @@ import express from "express";
 import ServiceBroker from "../broker/broker"
 import ResponseStatus from "../helper/responseStatus";
 import type { Request, Response, NextFunction } from "express";
-import { createChannel, createChannelV2, deletChannel, getIdByEmail, getNamesById, getServerInviteLink, leaveGuild, logInBot, loginBots, sendDMAsBot1, sendFileToChannel, sendMessageToChannel } from "../helper/discord";
+import { createChannel, createChannelV2, getAppInfo, getIdByEmail, getNamesById, getServerInviteLink, leaveGuild, logInBot, loginBots, sendDMAsBot1, sendFileToChannel, sendMessageToChannel } from "../helper/discord";
 import redis from "../config/redis";
 import { Client } from "discord.js";
 import multer from "multer";
@@ -94,16 +94,16 @@ router.post("/create-channel", async (req, res) => {
   }
 });
 
-router.post("/delete-channel", async (req, res) => {
-  try {
-    const { channelId, guildId } = req.body;
-    console.log("req.body:", req.body);
-    const result = await deletChannel(channelId, guildId);
-    res.json({ success: true, result });
-  } catch (err: any) {
-    handleError(res, err as Error);
-  }
-})
+// router.post("/delete-channel", async (req, res) => {
+//   try {
+//     const { channelId, guildId } = req.body;
+//     console.log("req.body:", req.body);
+//     const result = await deleteChannel(channelId, guildId);
+//     res.json({ success: true, result });
+//   } catch (err: any) {
+//     handleError(res, err as Error);
+//   }
+// })
 
 router.post(
   "/send-file",
@@ -225,6 +225,7 @@ router.post("/sendMessageToChannel", async (req: Request, res: Response) => {
   try {
     const { channelId, guildId, content } = req.body;
     const result = await sendMessageToChannel(channelId, content, guildId,);
+    // const result = await sendMessage(channelId, content, guildId);
     res.json(ResponseStatus.OK(result, "Message sent successfully"));
   } catch (err) {
     console.log("err in sendMessageToChannel :", err);
@@ -291,6 +292,19 @@ router.post("/sendMessageAsBot", async (req: Request, res: Response) => {
     handleError(res, err as Error);
   }
 })
+
+
+router.post("/getAppInfo", async (req: Request, res: Response) => {
+  try {
+    const { clientId } = req.body;
+    const result = await getAppInfo(clientId);
+    res.json(ResponseStatus.OK(result, "App info fetched successfully"));
+  } catch (err) {
+    console.log("err in getAppInfo :", err);
+    handleError(res, err as Error);
+  }
+}
+)
 
 
 // router.post()

@@ -3,7 +3,7 @@ import user from "./userController"
 import discord from "./discordController.js";
 const router = express.Router();
 
-router.get("/", (req, res) => {
+router.get("/test", (req, res) => {
     res.send("Welcome to the DiscordAPI");
 });
 router.use("/", user);

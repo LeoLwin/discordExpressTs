@@ -629,8 +629,6 @@ const logInBot = async (botToken: string, clientId: string, clientSecret: string
     });
 
 
-
-
     await botClient.login(botToken);
     // clients.push(botClient);
     botClients.push(botClient);

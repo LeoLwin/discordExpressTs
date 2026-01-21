@@ -14,12 +14,12 @@ const handleError = (res: Response, err: Error) => {
 
 router.get("/list", async (req: Request, res: Response) => {
   try {
-    const {current, limit, role }= req.body;
+    const { current, limit, role } = req.body;
     console.log("req.body :", req.body);
-    if(!current || !limit){
-      return res.json({message:"Invalid parameters"})
+    if (!current || !limit) {
+      return res.json({ message: "Invalid parameters" })
     }
-    const result: any = await ServiceBroker.call("blog.list",{current,limit});
+    const result: any = await ServiceBroker.call("blog.list", { current, limit });
     console.log("Result : ", result);
     res.json({ result });
   } catch (err) {
@@ -97,5 +97,5 @@ router.delete("/delete/:id", async (req: Request, res: Response) => {
   }
 });
 
-export default router; 
+export default router;
 

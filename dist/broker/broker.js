@@ -47,8 +47,8 @@ console.log("Redis Config:", {
     password: config_1.default.redis.password,
 });
 let theBroker = new moleculer_1.ServiceBroker({
-    namespace: "BlogErina",
-    nodeID: "endpoint-node123444",
+    namespace: "akarizen",
+    nodeID: "endpont-node-1",
     logLevel: "info",
     transporter: {
         type: "Redis",
